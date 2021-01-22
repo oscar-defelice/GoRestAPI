@@ -1,114 +1,87 @@
+// main.go
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
+    "encoding/json"
+    "fmt"
+    "log"
+    "io/ioutil"
+    "net/http"
 
-	"github.com/gorilla/mux"
+    "github.com/gorilla/mux"
 )
 
-type event struct {
-	ID          string `json:"ID"`
-	Title       string `json:"Title"`
-	Description string `json:"Description"`
+// Article - Our struct for all articles
+type Article struct {
+    Id      string `json:"Id"`
+    Title   string `json:"Title"`
+    Desc    string `json:"desc"`
+    Content string `json:"content"`
 }
 
-type allEvents []event
+var Articles []Article
 
-var events = allEvents{
-	{
-		ID:          "1",
-		Title:       "Introduction to Golang API",
-		Description: "Come join us for a chance to learn how golang API works.",
-	},
+func homePage(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, "Welcome to the HomePage!")
+    fmt.Println("Endpoint Hit: homePage")
 }
 
-func homeLink(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome home!")
+func returnAllArticles(w http.ResponseWriter, r *http.Request) {
+    fmt.Println("Endpoint Hit: returnAllArticles")
+    json.NewEncoder(w).Encode(Articles)
 }
 
-func createEvent(w http.ResponseWriter, r *http.Request) {
-	var newEvent event
-	// Convert r.Body into a readable formart
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		fmt.Fprintf(w, "Kindly enter data with the event id, title and description only in order to update")
-	}
+func returnSingleArticle(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    key := vars["id"]
 
-	json.Unmarshal(reqBody, &newEvent)
-
-	// Add the newly created event to the array of events
-	events = append(events, newEvent)
-
-	// Return the 201 created status code
-	w.WriteHeader(http.StatusCreated)
-	// Return the newly created event
-	json.NewEncoder(w).Encode(newEvent)
+    for _, article := range Articles {
+        if article.Id == key {
+            json.NewEncoder(w).Encode(article)
+        }
+    }
 }
 
-func getOneEvent(w http.ResponseWriter, r *http.Request) {
-	// Get the ID from the url
-	eventID := mux.Vars(r)["id"]
+func createNewArticle(w http.ResponseWriter, r *http.Request) {
+    // get the body of our POST request
+    // unmarshal this into a new Article struct
+    // append this to our Articles array.
+    reqBody, _ := ioutil.ReadAll(r.Body)
+    var article Article
+    json.Unmarshal(reqBody, &article)
+    // update our global Articles array to include
+    // our new Article
+    Articles = append(Articles, article)
 
-	// Get the details from an existing event
-	// Use the blank identifier to avoid creating a value that will not be used
-	for _, singleEvent := range events {
-		if singleEvent.ID == eventID {
-			json.NewEncoder(w).Encode(singleEvent)
-		}
-	}
+    json.NewEncoder(w).Encode(article)
 }
 
-func getAllEvents(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(events)
+func deleteArticle(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    id := vars["id"]
+
+    for index, article := range Articles {
+        if article.Id == id {
+            Articles = append(Articles[:index], Articles[index+1:]...)
+        }
+    }
+
 }
 
-func updateEvent(w http.ResponseWriter, r *http.Request) {
-	// Get the ID from the url
-	eventID := mux.Vars(r)["id"]
-	var updatedEvent event
-	// Convert r.Body into a readable formart
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		fmt.Fprintf(w, "Kindly enter data with the event title and description only in order to update")
-	}
-
-	json.Unmarshal(reqBody, &updatedEvent)
-
-	for i, singleEvent := range events {
-		if singleEvent.ID == eventID {
-			singleEvent.Title = updatedEvent.Title
-			singleEvent.Description = updatedEvent.Description
-			events[i] = singleEvent
-			json.NewEncoder(w).Encode(singleEvent)
-		}
-	}
-}
-
-func deleteEvent(w http.ResponseWriter, r *http.Request) {
-	// Get the ID from the url
-	eventID := mux.Vars(r)["id"]
-
-	// Get the details from an existing event
-	// Use the blank identifier to avoid creating a value that will not be used
-	for i, singleEvent := range events {
-		if singleEvent.ID == eventID {
-			events = append(events[:i], events[i+1:]...)
-			fmt.Fprintf(w, "The event with ID %v has been deleted successfully", eventID)
-		}
-	}
+func handleRequests() {
+    myRouter := mux.NewRouter().StrictSlash(true)
+    myRouter.HandleFunc("/", homePage)
+    myRouter.HandleFunc("/articles", returnAllArticles)
+    myRouter.HandleFunc("/article", createNewArticle).Methods("POST")
+    myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")
+    myRouter.HandleFunc("/article/{id}", returnSingleArticle)
+    log.Fatal(http.ListenAndServe(":10000", myRouter))
 }
 
 func main() {
-	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", homeLink)
-	router.HandleFunc("/event", createEvent).Methods("POST")
-	router.HandleFunc("/events", getAllEvents).Methods("GET")
-	router.HandleFunc("/events/{id}", getOneEvent).Methods("GET")
-	router.HandleFunc("/events/{id}", updateEvent).Methods("PATCH")
-	router.HandleFunc("/events/{id}", deleteEvent).Methods("DELETE")
-	log.Fatal(http.ListenAndServe(":8080", router))
+    Articles = []Article{
+        Article{Id: "1", Title: "Hello", Desc: "Article Description", Content: "Article Content"},
+        Article{Id: "2", Title: "Hello 2", Desc: "Article Description", Content: "Article Content"},
+    }
+    handleRequests()
 }
